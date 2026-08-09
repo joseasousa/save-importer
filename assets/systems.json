@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "userdata": "/userdata",
+  "system_aliases": {
+    "arcade": ["fbneo", "mame", "arcade"],
+    "dreamcast": ["flycast", "dreamcast", "dc"],
+    "gb": ["gambatte", "game boy", "gb"],
+    "gba": ["mgba", "gpsp", "game boy advance", "gba"],
+    "gbc": ["game boy color", "gbc"],
+    "megadrive": ["genesis plus gx", "picodrive", "genesis", "megadrive", "md"],
+    "n64": ["mupen64", "parallel", "n64"],
+    "nds": ["drastic", "melonds", "nintendo ds", "nds"],
+    "nes": ["fceumm", "nestopia", "nes"],
+    "psp": ["ppsspp", "psp"],
+    "psx": ["pcsx", "playstation", "ps1", "psx"],
+    "snes": ["snes9x", "supafaust", "super nintendo", "sfc", "snes"]
+  },
+  "save_extensions": [".srm", ".sav", ".eep", ".fla", ".rtc", ".nv", ".mcr", ".mpk"],
+  "state_extensions": [".state", ".state1", ".state2", ".state3", ".state4", ".state5", ".state6", ".state7", ".state8", ".state9", ".st0", ".st1", ".st2"]
+}

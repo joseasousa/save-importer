@@ -1,0 +1,35 @@
+name: build-knulli
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  arm64-package:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install SDL2 build libraries
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev zip
+      - name: Build application
+        run: |
+          mkdir -p build
+          CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o build/muos-save-importer ./cmd/importer
+      - name: Assemble Knulli package
+        run: |
+          root="dist/muos-save-importer-knulli"
+          mkdir -p "$root/system/muos-save-importer" "$root/roms/ports"
+          install -m 0755 build/muos-save-importer "$root/system/muos-save-importer/muos-save-importer"
+          install -m 0644 assets/systems.json "$root/system/muos-save-importer/systems.json"
+          install -m 0755 "packaging/Importar Saves muOS.sh" "$root/roms/ports/Importar Saves muOS.sh"
+          install -m 0644 README.md "$root/LEIA-ME.md"
+          cd dist && zip -r muos-save-importer-knulli-arm64.zip muos-save-importer-knulli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: muos-save-importer-knulli-arm64
+          path: dist/muos-save-importer-knulli-arm64.zip
