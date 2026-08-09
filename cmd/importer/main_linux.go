@@ -8,18 +8,18 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jose/muos-save-importer/internal/syncer"
 	"github.com/veandco/go-sdl2/sdl"
-	"github.com/veandco/go-sdl2/ttf"
 )
 
 const width, height = 640, 480
+const wrapWidth = 52
 
 type ui struct {
-	win         *sdl.Window
-	ren         *sdl.Renderer
-	font, small *ttf.Font
+	win *sdl.Window
+	ren *sdl.Renderer
 }
 
 func main() {
@@ -43,10 +43,6 @@ func main() {
 		fatal(err)
 	}
 	defer sdl.Quit()
-	if err := ttf.Init(); err != nil {
-		fatal(err)
-	}
-	defer ttf.Quit()
 	var controllers []*sdl.GameController
 	for joystick := 0; joystick < sdl.NumJoysticks(); joystick++ {
 		if sdl.IsGameController(joystick) {
@@ -62,18 +58,7 @@ func main() {
 	}
 	defer win.Destroy()
 	defer ren.Destroy()
-	fontPath := findFont()
-	font, err := ttf.OpenFont(fontPath, 24)
-	if err != nil {
-		fatal(err)
-	}
-	defer font.Close()
-	small, err := ttf.OpenFont(fontPath, 17)
-	if err != nil {
-		fatal(err)
-	}
-	defer small.Close()
-	u := &ui{win: win, ren: ren, font: font, small: small}
+	u := &ui{win: win, ren: ren}
 	u.menu(engine, idxPath)
 }
 
@@ -174,7 +159,8 @@ func (u *ui) confirm(title, message string) bool {
 	items := []string{"Continuar", "Cancelar"}
 	selected := 1
 	for {
-		u.screen(title, append(wrap(message, 67), items...), selected+len(wrap(message, 67)), "A: confirmar   B: cancelar")
+		lines := wrap(message, wrapWidth)
+		u.screen(title, append(lines, items...), selected+len(lines), "A: confirmar   B: cancelar")
 		switch waitKey() {
 		case "up", "down":
 			selected = 1 - selected
@@ -252,7 +238,7 @@ func (u *ui) history(userdata string) {
 func (u *ui) screen(title string, items []string, selected int, footer string) {
 	u.ren.SetDrawColor(12, 18, 29, 255)
 	u.ren.Clear()
-	u.text(title, 28, 22, u.font, sdl.Color{R: 91, G: 192, B: 235, A: 255})
+	u.text(title, 28, 22, 3, sdl.Color{R: 91, G: 192, B: 235, A: 255})
 	y := 75
 	for i, item := range items {
 		color := sdl.Color{R: 220, G: 225, B: 230, A: 255}
@@ -261,8 +247,8 @@ func (u *ui) screen(title string, items []string, selected int, footer string) {
 			u.ren.FillRect(&sdl.Rect{X: 20, Y: int32(y - 5), W: 600, H: 34})
 			color = sdl.Color{R: 255, G: 214, B: 102, A: 255}
 		}
-		for _, line := range wrap(item, 67) {
-			u.text(line, 32, y, u.small, color)
+		for _, line := range wrap(item, wrapWidth) {
+			u.text(line, 32, y, 2, color)
 			y += 24
 		}
 		y += 7
@@ -270,11 +256,11 @@ func (u *ui) screen(title string, items []string, selected int, footer string) {
 			break
 		}
 	}
-	u.text(footer, 20, 449, u.small, sdl.Color{R: 145, G: 155, B: 165, A: 255})
+	u.text(footer, 20, 449, 2, sdl.Color{R: 145, G: 155, B: 165, A: 255})
 	u.ren.Present()
 }
 func (u *ui) message(title, msg string) {
-	u.screen(title, wrap(msg, 67), -1, "A/B: voltar")
+	u.screen(title, wrap(msg, wrapWidth), -1, "A/B: voltar")
 	for {
 		key := waitKey()
 		if key == "ok" || key == "back" {
@@ -283,18 +269,32 @@ func (u *ui) message(title, msg string) {
 	}
 }
 
-func (u *ui) text(text string, x, y int, font *ttf.Font, color sdl.Color) {
-	surf, err := font.RenderUTF8Blended(text, color)
-	if err != nil {
-		return
+func (u *ui) text(text string, x, y, scale int, color sdl.Color) {
+	u.ren.SetDrawColor(color.R, color.G, color.B, color.A)
+	cursor := x
+	for _, ch := range displayText(text) {
+		if ch == ' ' {
+			cursor += 4 * scale
+			continue
+		}
+		pattern, ok := bitmapFont[ch]
+		if !ok {
+			pattern = bitmapFont['?']
+		}
+		for row, bits := range pattern {
+			for col, bit := range bits {
+				if bit == '1' {
+					u.ren.FillRect(&sdl.Rect{
+						X: int32(cursor + col*scale),
+						Y: int32(y + row*scale),
+						W: int32(scale),
+						H: int32(scale),
+					})
+				}
+			}
+		}
+		cursor += 6 * scale
 	}
-	defer surf.Free()
-	tex, err := u.ren.CreateTextureFromSurface(surf)
-	if err != nil {
-		return
-	}
-	defer tex.Destroy()
-	u.ren.Copy(tex, nil, &sdl.Rect{X: int32(x), Y: int32(y), W: surf.W, H: surf.H})
 }
 
 func waitKey() string {
@@ -380,14 +380,6 @@ func human(n int64) string {
 	}
 	return fmt.Sprintf("%.1f MiB", float64(n)/(1024*1024))
 }
-func findFont() string {
-	for _, p := range []string{"/usr/share/fonts/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"} {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-}
 func envDefault(k, v string) string {
 	if x := os.Getenv(k); x != "" {
 		return x
@@ -395,3 +387,92 @@ func envDefault(k, v string) string {
 	return v
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, err); time.Sleep(3 * time.Second); os.Exit(1) }
+
+func displayText(s string) string {
+	replacer := strings.NewReplacer(
+		"→", "->", "←", "<-", "↔", "<->",
+		"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a",
+		"Á", "A", "À", "A", "Â", "A", "Ã", "A", "Ä", "A",
+		"é", "e", "è", "e", "ê", "e", "ë", "e",
+		"É", "E", "È", "E", "Ê", "E", "Ë", "E",
+		"í", "i", "ì", "i", "î", "i", "ï", "i",
+		"Í", "I", "Ì", "I", "Î", "I", "Ï", "I",
+		"ó", "o", "ò", "o", "ô", "o", "õ", "o", "ö", "o",
+		"Ó", "O", "Ò", "O", "Ô", "O", "Õ", "O", "Ö", "O",
+		"ú", "u", "ù", "u", "û", "u", "ü", "u",
+		"Ú", "U", "Ù", "U", "Û", "U", "Ü", "U",
+		"ç", "c", "Ç", "C",
+	)
+	var b strings.Builder
+	for _, r := range replacer.Replace(s) {
+		if r <= unicode.MaxASCII {
+			b.WriteRune(unicode.ToUpper(r))
+		}
+	}
+	return b.String()
+}
+
+var bitmapFont = map[rune][7]string{
+	' ':  {"00000", "00000", "00000", "00000", "00000", "00000", "00000"},
+	'!':  {"00100", "00100", "00100", "00100", "00100", "00000", "00100"},
+	'"':  {"01010", "01010", "01010", "00000", "00000", "00000", "00000"},
+	'#':  {"01010", "01010", "11111", "01010", "11111", "01010", "01010"},
+	'%':  {"11001", "11010", "00100", "01000", "10110", "00110", "00000"},
+	'&':  {"01100", "10010", "10100", "01000", "10101", "10010", "01101"},
+	'\'': {"00100", "00100", "01000", "00000", "00000", "00000", "00000"},
+	'(':  {"00010", "00100", "01000", "01000", "01000", "00100", "00010"},
+	')':  {"01000", "00100", "00010", "00010", "00010", "00100", "01000"},
+	'*':  {"00000", "00100", "10101", "01110", "10101", "00100", "00000"},
+	'+':  {"00000", "00100", "00100", "11111", "00100", "00100", "00000"},
+	',':  {"00000", "00000", "00000", "00000", "00100", "00100", "01000"},
+	'-':  {"00000", "00000", "00000", "11111", "00000", "00000", "00000"},
+	'.':  {"00000", "00000", "00000", "00000", "00000", "01100", "01100"},
+	'/':  {"00001", "00010", "00100", "01000", "10000", "00000", "00000"},
+	'0':  {"01110", "10001", "10011", "10101", "11001", "10001", "01110"},
+	'1':  {"00100", "01100", "00100", "00100", "00100", "00100", "01110"},
+	'2':  {"01110", "10001", "00001", "00010", "00100", "01000", "11111"},
+	'3':  {"11110", "00001", "00001", "01110", "00001", "00001", "11110"},
+	'4':  {"00010", "00110", "01010", "10010", "11111", "00010", "00010"},
+	'5':  {"11111", "10000", "10000", "11110", "00001", "00001", "11110"},
+	'6':  {"00110", "01000", "10000", "11110", "10001", "10001", "01110"},
+	'7':  {"11111", "00001", "00010", "00100", "01000", "01000", "01000"},
+	'8':  {"01110", "10001", "10001", "01110", "10001", "10001", "01110"},
+	'9':  {"01110", "10001", "10001", "01111", "00001", "00010", "11100"},
+	':':  {"00000", "01100", "01100", "00000", "01100", "01100", "00000"},
+	';':  {"00000", "01100", "01100", "00000", "01100", "00100", "01000"},
+	'<':  {"00010", "00100", "01000", "10000", "01000", "00100", "00010"},
+	'=':  {"00000", "00000", "11111", "00000", "11111", "00000", "00000"},
+	'>':  {"01000", "00100", "00010", "00001", "00010", "00100", "01000"},
+	'?':  {"01110", "10001", "00001", "00010", "00100", "00000", "00100"},
+	'[':  {"01110", "01000", "01000", "01000", "01000", "01000", "01110"},
+	'\\': {"10000", "01000", "00100", "00010", "00001", "00000", "00000"},
+	']':  {"01110", "00010", "00010", "00010", "00010", "00010", "01110"},
+	'_':  {"00000", "00000", "00000", "00000", "00000", "00000", "11111"},
+	'|':  {"00100", "00100", "00100", "00100", "00100", "00100", "00100"},
+	'A':  {"01110", "10001", "10001", "11111", "10001", "10001", "10001"},
+	'B':  {"11110", "10001", "10001", "11110", "10001", "10001", "11110"},
+	'C':  {"01110", "10001", "10000", "10000", "10000", "10001", "01110"},
+	'D':  {"11110", "10001", "10001", "10001", "10001", "10001", "11110"},
+	'E':  {"11111", "10000", "10000", "11110", "10000", "10000", "11111"},
+	'F':  {"11111", "10000", "10000", "11110", "10000", "10000", "10000"},
+	'G':  {"01110", "10001", "10000", "10111", "10001", "10001", "01110"},
+	'H':  {"10001", "10001", "10001", "11111", "10001", "10001", "10001"},
+	'I':  {"01110", "00100", "00100", "00100", "00100", "00100", "01110"},
+	'J':  {"00111", "00010", "00010", "00010", "10010", "10010", "01100"},
+	'K':  {"10001", "10010", "10100", "11000", "10100", "10010", "10001"},
+	'L':  {"10000", "10000", "10000", "10000", "10000", "10000", "11111"},
+	'M':  {"10001", "11011", "10101", "10101", "10001", "10001", "10001"},
+	'N':  {"10001", "11001", "10101", "10011", "10001", "10001", "10001"},
+	'O':  {"01110", "10001", "10001", "10001", "10001", "10001", "01110"},
+	'P':  {"11110", "10001", "10001", "11110", "10000", "10000", "10000"},
+	'Q':  {"01110", "10001", "10001", "10001", "10101", "10010", "01101"},
+	'R':  {"11110", "10001", "10001", "11110", "10100", "10010", "10001"},
+	'S':  {"01111", "10000", "10000", "01110", "00001", "00001", "11110"},
+	'T':  {"11111", "00100", "00100", "00100", "00100", "00100", "00100"},
+	'U':  {"10001", "10001", "10001", "10001", "10001", "10001", "01110"},
+	'V':  {"10001", "10001", "10001", "10001", "10001", "01010", "00100"},
+	'W':  {"10001", "10001", "10001", "10101", "10101", "10101", "01010"},
+	'X':  {"10001", "10001", "01010", "00100", "01010", "10001", "10001"},
+	'Y':  {"10001", "10001", "01010", "00100", "00100", "00100", "00100"},
+	'Z':  {"11111", "00001", "00010", "00100", "01000", "10000", "11111"},
+}

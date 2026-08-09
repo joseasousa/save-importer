@@ -3,7 +3,7 @@
 test:
 	go test ./internal/...
 
-# Requires an aarch64 Linux cross-compiler with SDL2 and SDL2_ttf development files.
+# Requires an aarch64 Linux cross-compiler with SDL2 development files.
 build-arm64:
 	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build -trimpath -ldflags="-s -w" -o build/muos-save-importer ./cmd/importer
 

@@ -18,7 +18,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Install SDL2 build libraries
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev zip
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev zip
       - name: Build application
         run: |
           mkdir -p build

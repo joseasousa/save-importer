@@ -47,13 +47,13 @@ O reconhecimento combina:
 
 ## Desenvolvimento
 
-O núcleo de sincronização usa apenas a biblioteca padrão do Go. A interface Linux usa `go-sdl2`, SDL2 e SDL2_ttf.
+O núcleo de sincronização usa apenas a biblioteca padrão do Go. A interface Linux usa `go-sdl2` e SDL2.
 
 ```powershell
 go test ./internal/...
 ```
 
-Para gerar o binário aarch64, o ambiente precisa de `aarch64-linux-gnu-gcc` e bibliotecas de desenvolvimento SDL2/SDL2_ttf para arm64:
+Para gerar o binário aarch64, o ambiente precisa de `aarch64-linux-gnu-gcc` e bibliotecas de desenvolvimento SDL2 para arm64:
 
 ```sh
 make build-arm64
@@ -106,7 +106,7 @@ Em Ubuntu/Debian ARM64, instale as dependências:
 
 ```sh
 sudo apt update
-sudo apt install -y golang-go gcc pkg-config libsdl2-dev libsdl2-ttf-dev zip
+sudo apt install -y golang-go gcc pkg-config libsdl2-dev zip
 ```
 
 Compile o executável:
@@ -130,7 +130,7 @@ cd dist
 zip -r muos-save-importer-knulli-arm64.zip muos-save-importer-knulli
 ```
 
-Não use `GOOS=linux GOARCH=arm64 CGO_ENABLED=0`: a interface depende das bibliotecas nativas SDL2 e SDL2_ttf.
+Não use `GOOS=linux GOARCH=arm64 CGO_ENABLED=0`: a interface depende da biblioteca nativa SDL2.
 
 ### Instalação no cartão 2
 
