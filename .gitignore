@@ -2,5 +2,7 @@
 /dist/
 /.gocache/
 /.gomodcache/
+/.cache/
+.DS_Store
 *.tmp
 *.importing
