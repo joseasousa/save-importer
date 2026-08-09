@@ -11,27 +11,20 @@ permissions:
 jobs:
   arm64-package:
     runs-on: ubuntu-24.04-arm
+    container: golang:1.24-bullseye
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
       - name: Install SDL2 build libraries
-        run: sudo apt-get update && sudo apt-get install -y zip
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends libsdl2-dev zip file
       - name: Build application
         run: |
-          docker run --rm --platform linux/arm64 \
-            -v "$PWD:/src" -w /src golang:1.24-bullseye bash -c '
-              set -e
-              export DEBIAN_FRONTEND=noninteractive
-              apt-get update
-              apt-get install -y --no-install-recommends libsdl2-dev file
-              mkdir -p build
-              CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o build/muos-save-importer ./cmd/importer
-              file build/muos-save-importer
-              cp -L /usr/lib/aarch64-linux-gnu/libSDL2-2.0.so.0 build/
-            '
+          mkdir -p build
+          go test ./internal/...
+          CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o build/muos-save-importer ./cmd/importer
+          file build/muos-save-importer
+          cp -L /usr/lib/aarch64-linux-gnu/libSDL2-2.0.so.0 build/
       - name: Assemble Knulli package
         run: |
           root="dist/muos-save-importer-knulli"
@@ -48,12 +41,8 @@ jobs:
           path: dist/muos-save-importer-knulli-arm64.zip
       - name: Publish release asset
         if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          asset="dist/muos-save-importer-knulli-arm64.zip"
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$asset" --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" "$asset" --title "$GITHUB_REF_NAME" --notes "Automated Knulli ARM64 build."
-          fi
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/muos-save-importer-knulli-arm64.zip
+          body: Automated Knulli ARM64 build.
+          overwrite_files: true
