@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 	"unicode"
@@ -17,6 +18,8 @@ import (
 const width, height = 640, 480
 const wrapWidth = 52
 
+var appLog *os.File
+
 type ui struct {
 	win *sdl.Window
 	ren *sdl.Renderer
@@ -24,6 +27,16 @@ type ui struct {
 
 func main() {
 	userdata := envDefault("USERDATA", "/userdata")
+	initLog(userdata)
+	defer closeLog()
+	defer func() {
+		if r := recover(); r != nil {
+			logf("panic: %v\n%s", r, debug.Stack())
+			time.Sleep(3 * time.Second)
+			os.Exit(2)
+		}
+	}()
+	logf("starting app, USERDATA=%s", userdata)
 	appDir := filepath.Join(userdata, "system", "muos-save-importer")
 	cfgPath := filepath.Join(appDir, "systems.json")
 	idxPath := filepath.Join(appDir, "index.json")
@@ -43,6 +56,7 @@ func main() {
 		fatal(err)
 	}
 	defer sdl.Quit()
+	logf("sdl initialized")
 	var controllers []*sdl.GameController
 	for joystick := 0; joystick < sdl.NumJoysticks(); joystick++ {
 		if sdl.IsGameController(joystick) {
@@ -58,8 +72,10 @@ func main() {
 	}
 	defer win.Destroy()
 	defer ren.Destroy()
+	logf("window and renderer created")
 	u := &ui{win: win, ren: ren}
 	u.menu(engine, idxPath)
+	logf("app exited normally")
 }
 
 func (u *ui) menu(e *syncer.Engine, idxPath string) {
@@ -98,15 +114,19 @@ func (u *ui) menu(e *syncer.Engine, idxPath string) {
 }
 
 func (u *ui) run(e *syncer.Engine, d syncer.Direction, idxPath string, full bool) {
+	logf("run direction=%s full=%v", d, full)
 	if !u.confirm("Atenção aos save states", "Save states podem não funcionar entre núcleos ou versões diferentes. Os saves normais são mais portáveis. Continuar?") {
+		logf("run cancelled before scan")
 		return
 	}
 	u.message("Varredura", "Procurando saves novos ou modificados...")
 	items, err := e.Scan(d, full)
 	if err != nil {
+		logf("scan error: %v", err)
 		u.message("Não foi possível continuar", err.Error())
 		return
 	}
+	logf("scan found %d candidate(s)", len(items))
 	if len(items) == 0 {
 		u.message("Tudo atualizado", "Nenhum save novo ou modificado foi encontrado.")
 		return
@@ -138,10 +158,19 @@ func (u *ui) run(e *syncer.Engine, d syncer.Direction, idxPath string, full bool
 			}
 		}
 		u.message(fmt.Sprintf("Copiando %d/%d", i+1, len(items)), filepath.Base(c.Source))
+		logf("copy %d/%d source=%s dest=%s action=%s", i+1, len(items), c.Source, c.Destination, action)
 		results = append(results, e.Copy(c, d, action))
+		if results[len(results)-1].Err != nil {
+			logf("copy error: %v", results[len(results)-1].Err)
+		}
 	}
-	_ = syncer.SaveIndex(idxPath, e.Index)
+	if err := syncer.SaveIndex(idxPath, e.Index); err != nil {
+		logf("save index error: %v", err)
+	}
 	report, reportErr := syncer.WriteReport(filepath.Join(e.Config.Userdata, "system", "logs", "muos-save-importer"), d, results)
+	if reportErr != nil {
+		logf("report error: %v", reportErr)
+	}
 	errs := 0
 	for _, r := range results {
 		if r.Err != nil {
@@ -386,7 +415,41 @@ func envDefault(k, v string) string {
 	}
 	return v
 }
-func fatal(err error) { fmt.Fprintln(os.Stderr, err); time.Sleep(3 * time.Second); os.Exit(1) }
+func fatal(err error) {
+	logf("fatal: %v", err)
+	fmt.Fprintln(os.Stderr, err)
+	time.Sleep(3 * time.Second)
+	os.Exit(1)
+}
+
+func initLog(userdata string) {
+	dir := filepath.Join(userdata, "system", "logs", "muos-save-importer")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "log setup failed: %v\n", err)
+		return
+	}
+	path := filepath.Join(dir, "app.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "log open failed: %v\n", err)
+		return
+	}
+	appLog = f
+}
+
+func closeLog() {
+	if appLog != nil {
+		_ = appLog.Close()
+	}
+}
+
+func logf(format string, args ...any) {
+	line := fmt.Sprintf(time.Now().Format(time.RFC3339)+" "+format+"\n", args...)
+	if appLog != nil {
+		_, _ = appLog.WriteString(line)
+	}
+	_, _ = os.Stderr.WriteString(line)
+}
 
 func displayText(s string) string {
 	replacer := strings.NewReplacer(

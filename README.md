@@ -44,6 +44,7 @@ O reconhecimento combina:
 - O índice incremental fica em `/userdata/system/muos-save-importer/index.json`.
 - Índices inválidos são renomeados para `index.json.corrupt` e reconstruídos.
 - Relatórios ficam em `/userdata/system/logs/muos-save-importer/` e não incluem o conteúdo dos saves.
+- Falhas de inicialização e panic são registrados em `/userdata/system/logs/muos-save-importer/launcher.log` e `app.log`.
 
 ## Desenvolvimento
 
@@ -87,13 +88,15 @@ Esta opção não exige instalar compilador ARM ou SDL2 no computador.
 6. Abra a execução concluída e, na seção **Artifacts**, baixe `muos-save-importer-knulli-arm64`.
 7. Extraia o arquivo baixado. Dentro dele estará `muos-save-importer-knulli-arm64.zip`, que é o pacote para o cartão 2.
 
-O workflow compila o executável Linux ARM64 com SDL2 e prepara automaticamente esta estrutura:
+O workflow compila o executável Linux ARM64 com SDL2 em uma base Debian compatível e prepara automaticamente esta estrutura:
 
 ```text
 muos-save-importer-knulli/
 ├── system/
 │   └── muos-save-importer/
 │       ├── muos-save-importer
+│       ├── lib/
+│       │   └── libSDL2-2.0.so.0
 │       └── systems.json
 └── roms/
     └── ports/
